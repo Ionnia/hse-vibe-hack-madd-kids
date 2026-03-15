@@ -1,0 +1,255 @@
+================================================================================
+                        AI TUTOR BOT — ОПИСАНИЕ СИСТЕМЫ
+================================================================================
+
+Система представляет собой Telegram-бота для персонализированного обучения.
+Пользователь загружает учебные материалы, бот извлекает из них темы, генерирует
+задания, проверяет ответы и строит кривую повторений по алгоритму SM-2.
+
+
+────────────────────────────────────────────────────────────────────────────────
+ИНФРАСТРУКТУРА (docker-compose)
+────────────────────────────────────────────────────────────────────────────────
+
+  Сервис      Образ                    Порт (хост)    Назначение
+  ─────────   ──────────────────────   ────────────   ──────────────────────────
+  postgres    postgres:16-alpine       5433           Основная БД
+  redis       redis:7-alpine           6380           Брокер задач + кэш
+  api         Dockerfile.api           8001           FastAPI REST API
+  bot         Dockerfile.bot           —              Telegram bot (polling)
+  worker      Dockerfile.worker        —              Celery worker (задачи)
+  beat        Dockerfile.worker        —              Celery beat (расписание)
+
+Все Python-сервисы используют один образ (python:3.12-slim) с общим
+requirements.txt. Тома: postgres_data, redis_data, uploads, whisper_cache.
+
+
+────────────────────────────────────────────────────────────────────────────────
+БАЗА ДАННЫХ (PostgreSQL + SQLAlchemy 2.0 async)
+────────────────────────────────────────────────────────────────────────────────
+
+  Таблица                  Назначение
+  ──────────────────────   ──────────────────────────────────────────────────
+  users                    Telegram-пользователи (telegram_id, username)
+  study_materials          Загруженные материалы (статус, raw/normalized текст)
+  material_assets          Файлы материала (путь, file_id, extracted_text)
+  topics                   Учебные темы (name, text, subject, enriched_at)
+  topic_chunks             Чанки текста для обработки
+  tutor_tasks              Задания (question, answer, difficulty, hints)
+  review_logs              История ответов пользователя
+  user_topic_progress      Прогресс по теме (level: unknown→weak→learning→good→mastered)
+  repetition_states        Состояние SM-2 (interval_days, ease_factor, next_review_at)
+  gamification_profiles    XP и стрики
+
+Миграции — Alembic (async, raw SQL через op.execute для совместимости с asyncpg).
+  0001 — начальная схема
+  0002 — поля enriched_at, enrichment_sources для обогащения тем
+
+
+────────────────────────────────────────────────────────────────────────────────
+ПОЛНЫЙ ПУТЬ ОБРАБОТКИ МАТЕРИАЛА
+────────────────────────────────────────────────────────────────────────────────
+
+1. ЗАГРУЗКА (Telegram Bot → bot/handlers/upload.py)
+
+   Пользователь отправляет:
+   • Текст (>20 символов, без активного FSM-состояния)
+   • Фото → GPT-4o-mini Vision OCR → текст
+   • Голосовое / аудио → faster-whisper (локально) → текст
+
+   Создаётся запись StudyMaterial со статусом "uploaded".
+
+2. INGESTION PIPELINE (app/tasks/material_ingestion_tasks.py)
+
+   Celery-задача ingest_material запускает MaterialIngestionPipeline:
+   a. TextExtractionService — OCR или транскрибация, если нужно
+   b. NormalizationService — очистка пробелов, пустых строк
+   c. ChunkingService — разбивка на чанки по ~1000 символов
+   d. Сохранение AssetRepository, обновление статуса → "processing"
+
+3. ИЗВЛЕЧЕНИЕ ТЕМ (app/tasks/topic_extraction_tasks.py)
+
+   Celery-задача run_topic_pipeline → TopicPipelineService:
+   a. LLM (OpenAI gpt-4o-mini) анализирует нормализованный текст
+   b. Возвращает JSON: [{name, text, subject}, ...]
+   c. Каждая тема сохраняется в topics
+   d. Статус материала → "ready"
+   e. Для каждой новой темы автоматически ставится задача enrich_topic_task
+
+4. ОБОГАЩЕНИЕ ТЕМ (TopicEnrichmentService)
+
+   Celery-задача enrich_topic_task:
+   a. DuckDuckGoWebSearch.search("{topic.name} {subject}") → 5 сниппетов
+   b. LLM синтезирует найденное с оригинальным текстом
+   c. topic.text обновляется обогащённым текстом
+   d. Проставляется enriched_at, enrichment_sources (URLs)
+   Периодически (раз в час): enrich_pending_topics — подбирает необогащённые темы.
+
+
+────────────────────────────────────────────────────────────────────────────────
+ЦИКЛ ОБУЧЕНИЯ
+────────────────────────────────────────────────────────────────────────────────
+
+Команда /study:
+
+1. StudyOrchestratorService ищет следующее задание по расписанию (SM-2)
+2. Если нет — выбирается случайная тема пользователя
+3. TutorTaskService.get_next_task(user_id, topic_id):
+   a. Загружает последние 10 вопросов по теме (история)
+   b. LLM генерирует НОВЫЙ вопрос (не повторяя предыдущие)
+   c. Тип: "flash" (ответ текстом) или "exercise" (развёрнутый ответ)
+   d. Сложность 1–5 зависит от уровня прогресса (unknown/weak/learning/good/mastered)
+4. Бот показывает вопрос + подсказки
+
+Пользователь отвечает → /review:
+
+1. ReviewService.process_answer(task_id, user_answer):
+   a. LLM сравнивает ответ с эталоном → verdict: correct/partial/incorrect
+   b. Записывает ReviewLog
+2. ProgressRepository.update_progress → пересчёт level
+3. RepetitionService.update_after_review → SM-2:
+   - correct → интервал растёт (ease_factor ≥ 2.5)
+   - partial → интервал не меняется
+   - incorrect → сброс к 1 дню, ease_factor снижается
+4. next_review_at записывается в repetition_states
+
+Периодически (каждые 5 минут): send_due_repetitions — находит темы с истёкшим
+next_review_at (в реальном боте — отправляет уведомления).
+
+
+────────────────────────────────────────────────────────────────────────────────
+КОМАНДЫ БОТА
+────────────────────────────────────────────────────────────────────────────────
+
+  /start      Регистрация / приветствие
+  /help       Список команд
+  /topics     Все темы пользователя (✅ — обогащено, кнопка «🔍 Обогатить темы»)
+  /study      Получить следующее задание
+  /ask        Задать произвольный вопрос по теме (FSM: выбор темы → вопрос → ответ)
+  /progress   Статистика по темам и уровням
+  текст       Загрузить учебный материал (только без активного FSM-состояния)
+  фото        Загрузить через OCR
+  голосовое   Загрузить через Whisper
+
+
+────────────────────────────────────────────────────────────────────────────────
+LLM-АДАПТЕРЫ (app/adapters/llm/)
+────────────────────────────────────────────────────────────────────────────────
+
+  BaseLLM — абстрактный класс. Методы:
+    extract_topics(text)                   → list[TopicSchema]
+    generate_tutor_task(topic, level, prev_questions) → TaskSchema
+    evaluate_answer(question, correct, user) → ReviewResult
+    answer_question(topic_name, text, question) → str
+    enrich_topic(topic_name, text, search_results) → str
+    normalize_text(text) → str
+
+  OpenAILLM   — gpt-4o-mini, все промпты на русском языке
+  StubLLM     — детерминированные заглушки для тестов
+
+  Выбор адаптера: settings.llm_provider (stub | openai)
+
+
+────────────────────────────────────────────────────────────────────────────────
+WEB SEARCH АДАПТЕР (app/adapters/web_search/)
+────────────────────────────────────────────────────────────────────────────────
+
+  BaseWebSearch — метод search(query, max_results) → list[SearchResult]
+  SearchResult  — {title, url, snippet}
+
+  DuckDuckGoWebSearch — пакет duckduckgo-search, запрос выполняется в executor
+                        (не блокирует event loop)
+  StubWebSearch       — для тестов
+
+  Выбор: settings.web_search_backend (stub | duckduckgo)
+  Количество результатов: settings.web_search_results_count (по умолчанию 5)
+
+
+────────────────────────────────────────────────────────────────────────────────
+OCR И ТРАНСКРИБАЦИЯ
+────────────────────────────────────────────────────────────────────────────────
+
+  OCR:
+    OpenAIOCR  — GPT-4o-mini Vision, base64-кодирование изображения
+    StubOCR    — заглушка
+
+  Транскрибация:
+    LocalWhisperTranscription  — faster-whisper (локально, CPU/CUDA)
+                                  модель: settings.whisper_model_size (base)
+                                  запускается в executor, temp-файл для аудио
+    WhisperTranscription       — OpenAI Whisper API (fallback)
+    StubTranscription          — заглушка
+
+
+────────────────────────────────────────────────────────────────────────────────
+CELERY ЗАДАЧИ И РАСПИСАНИЕ
+────────────────────────────────────────────────────────────────────────────────
+
+  Задача                        Триггер             Описание
+  ───────────────────────────   ─────────────────   ──────────────────────────
+  ingest_material               после загрузки      OCR/транскрибация + чанки
+  run_topic_pipeline            после ingestion     LLM извлечение тем
+  enrich_topic_task             после каждой темы   DDG + LLM обогащение
+  enrich_pending_topics         раз в час (beat)    Обогащение пропущенных тем
+  send_due_repetitions          каждые 5 мин (beat) Поиск просроченных повторений
+
+  Важно: каждая задача создаёт свой engine с NullPool (asyncpg несовместим
+  с forked-процессами Celery при shared pool).
+
+
+────────────────────────────────────────────────────────────────────────────────
+REST API (FastAPI, порт 8001)
+────────────────────────────────────────────────────────────────────────────────
+
+  GET  /health                           Liveness probe
+  GET  /ready                            Readiness probe (проверяет БД)
+  GET  /materials?user_id=...            Материалы пользователя
+  GET  /materials/{id}/topics            Темы материала
+  GET  /topics/{id}                      Детали темы
+
+
+────────────────────────────────────────────────────────────────────────────────
+СТРУКТУРА ПРОЕКТА
+────────────────────────────────────────────────────────────────────────────────
+
+  app/
+  ├── adapters/
+  │   ├── llm/          base, openai_llm, stub_llm, factory
+  │   ├── ocr/          base, openai_ocr, stub_ocr
+  │   ├── transcription/ base, local_whisper, whisper_transcription, stub
+  │   ├── web_search/   base, duckduckgo, stub, factory
+  │   └── storage/      base, local
+  ├── api/
+  │   └── routes/       health, materials, topics
+  ├── bot/
+  │   └── handlers/     start, help, upload, topics, study, review, ask, progress
+  ├── core/             config, constants, logging
+  ├── db/               session, base
+  ├── models/           models.py (все ORM-модели)
+  ├── repositories/     repos.py (все репозитории)
+  ├── schemas/          schemas.py (Pydantic)
+  ├── services/         бизнес-логика (pipeline, enrichment, tutor, review, ...)
+  └── tasks/            celery_app, material_ingestion_tasks, topic_extraction_tasks
+
+  alembic/versions/     0001_initial, 0002_topic_enrichment
+  docker-compose.yml
+  requirements.txt
+  .env.example
+
+
+────────────────────────────────────────────────────────────────────────────────
+ПЕРЕМЕННЫЕ ОКРУЖЕНИЯ (ключевые)
+────────────────────────────────────────────────────────────────────────────────
+
+  DATABASE_URL              postgresql+asyncpg://...
+  TELEGRAM_TOKEN            токен бота
+  LLM_PROVIDER              stub | openai
+  LLM_API_KEY               ключ OpenAI
+  LLM_MODEL                 gpt-4o-mini (по умолчанию)
+  TRANSCRIPTION_BACKEND     stub | whisper_api | local_whisper
+  WEB_SEARCH_BACKEND        stub | duckduckgo
+  WEB_SEARCH_RESULTS_COUNT  5 (по умолчанию)
+  CELERY_BROKER_URL         redis://redis:6379/0
+  CELERY_RESULT_BACKEND     redis://redis:6379/1
+
+================================================================================

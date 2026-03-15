@@ -1,64 +1,64 @@
 # Tutor Bot
 
-A personalized AI-powered study assistant delivered via Telegram. Upload study materials (photos, voice notes, or text), and the bot extracts topics, generates flashcards and exercises, and uses spaced repetition to help you learn efficiently.
+Персонализированный учебный ассистент на базе ИИ, работающий через Telegram. Загружайте учебные материалы (фотографии, голосовые сообщения или текст), и бот будет извлекать темы, генерировать карточки и упражнения, а также использовать интервальные повторения, чтобы помогать вам учиться эффективнее.
 
-## Architecture
+## Архитектура
 
 ```
 tutor/
 ├── app/
-│   ├── api/          # FastAPI REST API
-│   ├── bot/          # Aiogram 3.x Telegram bot
-│   ├── core/         # Config, constants, logging
-│   ├── db/           # SQLAlchemy 2.0 async engine
-│   ├── models/       # ORM models
-│   ├── repositories/ # Async CRUD repositories
-│   ├── schemas/      # Pydantic v2 schemas
-│   ├── services/     # Business logic
-│   ├── adapters/     # Storage, OCR, transcription, LLM
-│   └── tasks/        # Celery tasks
-├── alembic/          # Database migrations
-└── tests/            # pytest test suite
+│   ├── api/          # REST API на FastAPI
+│   ├── bot/          # Telegram-бот на Aiogram 3.x
+│   ├── core/         # Конфигурация, константы, логирование
+│   ├── db/           # Асинхронный движок SQLAlchemy 2.0
+│   ├── models/       # ORM-модели
+│   ├── repositories/ # Асинхронные CRUD-репозитории
+│   ├── schemas/      # Схемы Pydantic v2
+│   ├── services/     # Бизнес-логика
+│   ├── adapters/     # Хранилище, OCR, транскрибация, LLM
+│   └── tasks/        # Задачи Celery
+├── alembic/          # Миграции базы данных
+└── tests/            # Набор тестов pytest
 ```
 
-## Services
+## Сервисы
 
-- **API** — FastAPI app on port 8000
-- **Bot** — Aiogram 3.x Telegram bot
-- **Worker** — Celery worker for background tasks
-- **Beat** — Celery beat scheduler for periodic tasks
-- **PostgreSQL** — Primary database
-- **Redis** — Celery broker and result backend
+- **API** — приложение FastAPI на порту 8000
+- **Bot** — Telegram-бот на Aiogram 3.x
+- **Worker** — воркер Celery для фоновых задач
+- **Beat** — планировщик Celery beat для периодических задач
+- **PostgreSQL** — основная база данных
+- **Redis** — брокер Celery и хранилище результатов
 
-## Quick Start
+## Быстрый старт
 
-### 1. Prerequisites
+### 1. Предварительные требования
 
-- Docker and Docker Compose
-- A Telegram bot token (get it from [@BotFather](https://t.me/BotFather))
+- Docker и Docker Compose
+- Токен Telegram-бота (получить можно у [@BotFather](https://t.me/BotFather))
 
-### 2. Configuration
+### 2. Конфигурация
 
 ```bash
 cp .env.example .env
-# Edit .env and set TELEGRAM_TOKEN at minimum
+# Отредактируйте .env и как минимум задайте TELEGRAM_TOKEN
 ```
 
-### 3. Start with Docker Compose
+### 3. Запуск через Docker Compose
 
 ```bash
 docker-compose up -d
 ```
 
-### 4. Run database migrations
+### 4. Выполнение миграций базы данных
 
 ```bash
 docker-compose exec api alembic upgrade head
 ```
 
-## Local Development
+## Локальная разработка
 
-### 1. Install dependencies
+### 1. Установка зависимостей
 
 ```bash
 python -m venv .venv
@@ -66,104 +66,104 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 2. Start PostgreSQL and Redis
+### 2. Запуск PostgreSQL и Redis
 
 ```bash
 docker-compose up -d postgres redis
 ```
 
-### 3. Run migrations
+### 3. Выполнение миграций
 
 ```bash
 alembic upgrade head
 ```
 
-### 4. Start the API
+### 4. Запуск API
 
 ```bash
 uvicorn app.api.main:app --reload
 ```
 
-### 5. Start the bot
+### 5. Запуск бота
 
 ```bash
 python -m app.bot.main
 ```
 
-### 6. Start Celery worker
+### 6. Запуск воркера Celery
 
 ```bash
 celery -A app.tasks.celery_app worker --loglevel=info
 ```
 
-## Running Tests
+## Запуск тестов
 
 ```bash
 pytest tests/ -v
 ```
 
-Tests use SQLite in-memory database and do not require a running PostgreSQL instance.
+Тесты используют SQLite в памяти и не требуют запущенного экземпляра PostgreSQL.
 
-## API Endpoints
+## API-эндпоинты
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/health` | Health check |
-| GET | `/ready` | Readiness check (tests DB connection) |
-| GET | `/materials?user_id=...` | List user's materials |
-| GET | `/materials/{id}` | Get material by ID |
-| GET | `/materials/{id}/status` | Get material processing status |
-| GET | `/materials/{id}/topics` | List topics for a material |
-| GET | `/topics/{id}` | Get topic by ID |
+| Метод | Путь | Описание |
+|--------|------|----------|
+| GET | `/health` | Проверка работоспособности |
+| GET | `/ready` | Проверка готовности (тестирует подключение к БД) |
+| GET | `/materials?user_id=...` | Список материалов пользователя |
+| GET | `/materials/{id}` | Получить материал по ID |
+| GET | `/materials/{id}/status` | Получить статус обработки материала |
+| GET | `/materials/{id}/topics` | Список тем для материала |
+| GET | `/topics/{id}` | Получить тему по ID |
 
-## Bot Commands
+## Команды бота
 
-| Command | Description |
-|---------|-------------|
-| `/start` | Register and get welcome message |
-| `/help` | Show available commands |
-| `/topics` | List your study topics |
-| `/study` | Start a study session |
-| `/progress` | View your learning progress |
+| Команда | Описание |
+|---------|----------|
+| `/start` | Регистрация и приветственное сообщение |
+| `/help` | Показать доступные команды |
+| `/topics` | Показать ваши учебные темы |
+| `/study` | Начать учебную сессию |
+| `/progress` | Посмотреть прогресс обучения |
 
-## Material Upload
+## Загрузка материалов
 
-Send any of the following to the bot:
-- **Photo** — Text extracted via OCR
-- **Voice / Audio** — Transcribed to text
-- **Text message** — Stored directly
+Отправьте боту любой из следующих типов данных:
+- **Фото** — текст будет извлечен через OCR
+- **Голос / Аудио** — будет преобразовано в текст
+- **Текстовое сообщение** — будет сохранено напрямую
 
-## Processing Pipeline
+## Конвейер обработки
 
-1. **Ingest** — Save file, create `StudyMaterial` record
-2. **Extract** — OCR / transcribe / passthrough
-3. **Normalize** — Clean and normalize text
-4. **Chunk** — Split into overlapping chunks
-5. **Extract Topics** — LLM extracts structured topics
-6. **Generate Tasks** — LLM creates flashcards/exercises per topic
-7. **Review** — LLM evaluates user answers
-8. **Repetition** — SM2 algorithm schedules next review
+1. **Ingest** — сохранить файл, создать запись `StudyMaterial`
+2. **Extract** — OCR / транскрибация / прямой пропуск
+3. **Normalize** — очистить и нормализовать текст
+4. **Chunk** — разбить на пересекающиеся фрагменты
+5. **Extract Topics** — LLM извлекает структурированные темы
+6. **Generate Tasks** — LLM создает карточки и упражнения по каждой теме
+7. **Review** — LLM оценивает ответы пользователя
+8. **Repetition** — алгоритм SM2 планирует следующее повторение
 
-## LLM Providers
+## Провайдеры LLM
 
-Configure via `LLM_PROVIDER` env var:
-- `stub` — deterministic stub for development/testing
-- `openai` — OpenAI API (requires `LLM_API_KEY`)
-- `ollama` — Local Ollama (requires `LLM_BASE_URL`)
+Настраиваются через переменную окружения `LLM_PROVIDER`:
+- `stub` — детерминированный заглушечный провайдер для разработки и тестирования
+- `openai` — OpenAI API (требуется `LLM_API_KEY`)
+- `ollama` — локальный Ollama (требуется `LLM_BASE_URL`)
 
-## Configuration
+## Конфигурация
 
-All settings are in `app/core/config.py` and read from environment variables or `.env` file. See `.env.example` for all available options.
+Все настройки находятся в `app/core/config.py` и считываются из переменных окружения или файла `.env`. Все доступные параметры перечислены в `.env.example`.
 
-## Database Schema
+## Схема базы данных
 
-- `users` — Telegram users
-- `study_materials` — Uploaded learning materials
-- `material_assets` — Individual files (images, audio, text)
-- `topics` — Extracted study topics
-- `topic_chunks` — Text chunks for processing
-- `tutor_tasks` — Generated flashcards and exercises
-- `review_logs` — Answer review history
-- `user_topic_progress` — Per-topic learning progress
-- `repetition_states` — SM2 spaced repetition state
-- `gamification_profiles` — XP, level, streaks
+- `users` — пользователи Telegram
+- `study_materials` — загруженные учебные материалы
+- `material_assets` — отдельные файлы (изображения, аудио, текст)
+- `topics` — извлеченные учебные темы
+- `topic_chunks` — текстовые фрагменты для обработки
+- `tutor_tasks` — сгенерированные карточки и упражнения
+- `review_logs` — история проверки ответов
+- `user_topic_progress` — прогресс обучения по темам
+- `repetition_states` — состояние интервального повторения SM2
+- `gamification_profiles` — XP, уровень, серии

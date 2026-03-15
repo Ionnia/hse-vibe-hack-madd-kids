@@ -32,6 +32,10 @@ class Settings(BaseSettings):
     transcription_backend: str = Field(default="stub")  # stub, whisper_api, local_whisper
     whisper_model_size: str = Field(default="base")     # tiny, base, small, medium, large
 
+    # Web Search
+    web_search_backend: str = Field(default="duckduckgo")  # stub, duckduckgo
+    web_search_results_count: int = Field(default=5)
+
     class Config:
         env_file = ".env"
 

@@ -160,6 +160,16 @@ class TopicRepository:
         result = await self.session.execute(select(Topic).where(Topic.id == topic_id))
         return result.scalar_one_or_none()
 
+    async def update_enrichment(
+        self, topic_id: UUID, enriched_text: str, sources: list[str]
+    ) -> None:
+        now = datetime.now(timezone.utc)
+        await self.session.execute(
+            update(Topic)
+            .where(Topic.id == topic_id)
+            .values(text=enriched_text, enriched_at=now, enrichment_sources=sources)
+        )
+
 
 class TutorTaskRepository:
     def __init__(self, session: AsyncSession) -> None:

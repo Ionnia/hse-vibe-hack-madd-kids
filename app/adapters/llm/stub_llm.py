@@ -76,6 +76,10 @@ class StubLLM(BaseLLM):
     async def answer_question(self, topic_name: str, topic_text: str, question: str) -> str:
         return f"[Stub] Ответ на вопрос «{question}» по теме «{topic_name}»: {topic_text[:200]}"
 
+    async def enrich_topic(self, topic_name: str, topic_text: str, search_results: list) -> str:
+        extra = " ".join(r.snippet for r in search_results[:2])
+        return f"{topic_text}\n\n[Stub enrichment] {extra[:200]}"
+
     async def normalize_text(self, text: str) -> str:
         # Basic Python string cleaning
         text = text.strip()

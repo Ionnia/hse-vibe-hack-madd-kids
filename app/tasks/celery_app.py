@@ -22,5 +22,9 @@ celery_app.conf.beat_schedule = {
     "send-due-repetitions": {
         "task": "app.tasks.topic_extraction_tasks.send_due_repetitions",
         "schedule": 300.0,  # every 5 minutes
-    }
+    },
+    "enrich-pending-topics": {
+        "task": "app.tasks.topic_extraction_tasks.enrich_pending_topics",
+        "schedule": 3600.0,  # every hour
+    },
 }

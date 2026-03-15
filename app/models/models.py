@@ -96,6 +96,8 @@ class Topic(Base):
         nullable=False,
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
+    enriched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    enrichment_sources: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
 
     material: Mapped["StudyMaterial"] = relationship("StudyMaterial", back_populates="topics")
     chunks: Mapped[list["TopicChunk"]] = relationship("TopicChunk", back_populates="topic")

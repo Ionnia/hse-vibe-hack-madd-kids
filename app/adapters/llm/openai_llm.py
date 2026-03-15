@@ -177,3 +177,36 @@ Return only valid JSON, no markdown."""
         text = text.strip()
         lines = [re.sub(r"[ \t]+", " ", l).strip() for l in text.splitlines()]
         return "\n".join(lines)
+
+    async def enrich_topic(self, topic_name: str, topic_text: str, search_results: list) -> str:
+        snippets = "\n".join(
+            f"- [{r.title}] ({r.url}): {r.snippet}" for r in search_results
+        )
+        prompt = f"""Ты учебный ассистент. Твоя задача — обогатить описание учебной темы дополнительными фактами из интернета.
+
+Тема: {topic_name}
+
+Текущее описание темы:
+{topic_text}
+
+Результаты поиска в интернете:
+{snippets}
+
+Инструкции:
+- Дополни описание темы новыми фактами, примерами или определениями из результатов поиска
+- Не противоречь оригинальному тексту
+- Пиши на русском языке, кратко и по делу
+- Верни только обогащённый текст темы, без заголовков и пояснений
+- Максимум 500 слов"""
+
+        try:
+            response = await self.client.chat.completions.create(
+                model=self.model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.3,
+                max_tokens=800,
+            )
+            return response.choices[0].message.content or topic_text
+        except Exception as e:
+            logger.error("enrich_topic failed: %s", e)
+            return topic_text

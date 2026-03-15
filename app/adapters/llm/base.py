@@ -1,6 +1,10 @@
 from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING
 
 from app.schemas.schemas import ReviewResult, TaskSchema, TopicSchema
+
+if TYPE_CHECKING:
+    from app.adapters.web_search.base import SearchResult
 
 
 class BaseLLM(ABC):
@@ -31,4 +35,14 @@ class BaseLLM(ABC):
     @abstractmethod
     async def answer_question(self, topic_name: str, topic_text: str, question: str) -> str:
         """Answer a user question based on topic content."""
+        ...
+
+    @abstractmethod
+    async def enrich_topic(
+        self,
+        topic_name: str,
+        topic_text: str,
+        search_results: list["SearchResult"],
+    ) -> str:
+        """Enrich topic text using web search results."""
         ...

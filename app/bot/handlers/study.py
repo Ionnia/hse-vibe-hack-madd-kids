@@ -66,6 +66,7 @@ async def cmd_study(message: Message, session: AsyncSession, state: FSMContext) 
         f"<b>Вопрос (сложность: {task.difficulty}/5):</b>\n\n"
         f"{task.question}"
         f"{hints_text}\n\n"
-        "Напиши свой ответ:",
+        "Напиши свой ответ:\n"
+        "<i>/cancel — отменить и выйти</i>",
         parse_mode="HTML",
     )

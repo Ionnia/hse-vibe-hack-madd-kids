@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from aiogram import Router
+from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,7 +13,7 @@ from app.services.study_orchestrator_service import StudyOrchestratorService
 router = Router(name="review")
 
 
-@router.message(StudyState.waiting_for_answer)
+@router.message(StudyState.waiting_for_answer, F.text)
 async def handle_answer(message: Message, session: AsyncSession, state: FSMContext) -> None:
     tg_user = message.from_user
     if tg_user is None:

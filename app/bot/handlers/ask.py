@@ -1,4 +1,4 @@
-from aiogram import Router
+from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -78,13 +78,14 @@ async def handle_topic_choice(message: Message, state: FSMContext) -> None:
     await state.set_state(AskState.waiting_for_question)
 
     await message.answer(
-        f"Тема: <b>{chosen['name']}</b>\n\nЗадай свой вопрос:",
+        f"Тема: <b>{chosen['name']}</b>\n\nЗадай свой вопрос:\n"
+        "<i>/cancel — отменить и выйти</i>",
         parse_mode="HTML",
         reply_markup=ReplyKeyboardRemove(),
     )
 
 
-@router.message(AskState.waiting_for_question)
+@router.message(AskState.waiting_for_question, F.text)
 async def handle_question(message: Message, state: FSMContext) -> None:
     question = message.text or ""
 

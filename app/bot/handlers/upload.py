@@ -1,6 +1,8 @@
 import logging
 
 from aiogram import Bot, Router
+from aiogram.filters import StateFilter
+from aiogram.fsm.state import default_state
 from aiogram.types import Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -103,7 +105,7 @@ async def handle_audio(message: Message, session: AsyncSession, bot: Bot) -> Non
     )
 
 
-@router.message(lambda m: m.text is not None and not m.text.startswith("/"))
+@router.message(StateFilter(default_state), lambda m: m.text is not None and not m.text.startswith("/"))
 async def handle_text(message: Message, session: AsyncSession) -> None:
     user = await _get_or_create_user(session, message)
     if user is None:
